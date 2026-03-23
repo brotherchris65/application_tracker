@@ -19,7 +19,8 @@ def get_conn():
     return connect(
         account=s["account"],
         user=s["user"],
-        password=s["password"],
+        private_key=s["private_key"],
+        private_key_passphrase =s["private_key_passphrase"],
         warehouse=s["warehouse"],
         database=s.get("database", "JOB_TRACKER"),
         schema=s.get("schema", "PUBLIC"),
