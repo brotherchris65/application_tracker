@@ -8,6 +8,9 @@ from snowflake.connector import connect, DictCursor
 import json
 from datetime import date, datetime
 import uuid
+import base64
+import binascii
+from cryptography.hazmat.primitives import serialization
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -16,11 +19,54 @@ import uuid
 def get_conn():
     """Return a cached Snowflake connection."""
     s = st.secrets["snowflake"]
+    private_key = s["private_key"]
+    passphrase = s.get("private_key_passphrase", "")
+
+    placeholder_fields = [
+        "account",
+        "user",
+        "private_key",
+        "warehouse",
+    ]
+    for field in placeholder_fields:
+        value = str(s.get(field, ""))
+        if "<your-" in value or "<paste-" in value:
+            raise ValueError(
+                "Snowflake secrets are placeholders. Update .streamlit/secrets.toml with real values."
+            )
+
+    if isinstance(private_key, str):
+        normalized = private_key.strip()
+        if "\\n" in normalized and "BEGIN" in normalized:
+            normalized = normalized.replace("\\n", "\n")
+
+        if "BEGIN" in normalized:
+            try:
+                key_obj = serialization.load_pem_private_key(
+                    normalized.encode("utf-8"),
+                    password=passphrase.encode("utf-8") if passphrase else None,
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    "Invalid snowflake.private_key in Streamlit secrets. Use a valid PEM private key and correct passphrase."
+                ) from exc
+            private_key = key_obj.private_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        else:
+            try:
+                private_key = base64.b64decode("".join(normalized.split()), validate=True)
+            except (ValueError, binascii.Error) as exc:
+                raise ValueError(
+                    "Invalid snowflake.private_key in Streamlit secrets. Provide PEM text (with BEGIN/END) or a base64-encoded DER key."
+                ) from exc
+
     return connect(
         account=s["account"],
         user=s["user"],
-        private_key=s["private_key"],
-        private_key_passphrase =s["private_key_passphrase"],
+        private_key=private_key,
         warehouse=s["warehouse"],
         database=s.get("database", "JOB_TRACKER"),
         schema=s.get("schema", "PUBLIC"),
