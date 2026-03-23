@@ -98,6 +98,50 @@ def render_job_detail(j):
             st.success("Status updated.")
             st.rerun()
 
+        st.markdown("---")
+        with st.expander("✏️ Edit Job Details"):
+            with st.form(f"edit_job_{j['job_id']}"):
+                e1, e2 = st.columns(2)
+                with e1:
+                    edit_title = st.text_input("Job Title *", value=j.get("title") or "")
+                    edit_url = st.text_input("Job URL", value=j.get("url") or "")
+                    edit_salary = st.text_input("Salary", value=j.get("salary") or "")
+                with e2:
+                    edit_company = st.text_input("Company *", value=j.get("company") or "")
+                    edit_location = st.text_input("Location", value=j.get("location") or "")
+                edit_jd = st.text_area("Job Description", value=j.get("jd") or "", height=180)
+
+                save_details = st.form_submit_button("💾 Save Job Details", type="primary")
+                if save_details:
+                    if not edit_title.strip() or not edit_company.strip():
+                        st.error("Job Title and Company are required.")
+                    else:
+                        db.update_job_details(
+                            j["job_id"],
+                            title=edit_title.strip(),
+                            company=edit_company.strip(),
+                            url=edit_url.strip(),
+                            location=edit_location.strip(),
+                            salary=edit_salary.strip(),
+                            jd=edit_jd.strip(),
+                        )
+                        st.success("Job details updated.")
+                        st.rerun()
+
+            st.markdown("---")
+            st.markdown("**Delete Job**")
+            confirm_delete = st.checkbox(
+                "I confirm this job was added by mistake and should be deleted.",
+                key=f"confirm_delete_{j['job_id']}"
+            )
+            if st.button("🗑 Delete Job", key=f"delete_job_{j['job_id']}"):
+                if not confirm_delete:
+                    st.error("Check the confirmation box before deleting.")
+                else:
+                    db.delete_job(j["job_id"])
+                    st.success("Job deleted.")
+                    st.rerun()
+
     with tab_analysis:
         analysis = db.get_analysis(j["job_id"])
         if not analysis:

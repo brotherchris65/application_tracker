@@ -240,6 +240,35 @@ def update_status(job_id, status):
     get_conn().commit()
 
 
+def update_job_details(job_id, *, title, company, url, location, salary, jd):
+    run("""
+        UPDATE JOBS
+        SET TITLE = %s,
+            COMPANY = %s,
+            URL = %s,
+            LOCATION = %s,
+            SALARY = %s,
+            JD = %s
+        WHERE JOB_ID = %s
+    """, (
+        title,
+        company,
+        url or None,
+        location or None,
+        salary or None,
+        jd or None,
+        job_id,
+    ))
+    get_conn().commit()
+
+
+def delete_job(job_id):
+    run("DELETE FROM JOB_DOCUMENTS WHERE JOB_ID = %s", (job_id,))
+    run("DELETE FROM JOB_ANALYSIS WHERE JOB_ID = %s", (job_id,))
+    run("DELETE FROM JOBS WHERE JOB_ID = %s", (job_id,))
+    get_conn().commit()
+
+
 def update_notes(job_id, notes, follow_date, app_date):
     run("""
         UPDATE JOBS SET NOTES = %s, FOLLOW_DATE = %s, APP_DATE = %s
