@@ -27,8 +27,8 @@ jobtracker/
 ├── docx_builder.py     # Builds formatted .docx from resume data
 ├── requirements.txt    # Python dependencies
 ├── .gitignore          # Keeps secrets.toml out of git
-└── .streamlit/
-    └── secrets.toml    # Your credentials (never commit this)
+├── secrets.example.toml # Safe template for local setup
+└── secrets.toml        # Your local credentials (never commit this)
 ```
 
 ---
@@ -37,26 +37,18 @@ jobtracker/
 
 ### 1. Clone / create a GitHub repo
 
-Push all files **except** `.streamlit/secrets.toml` to a GitHub repository.
-The `.gitignore` already excludes it.
+Push all files to a GitHub repository except your local `secrets.toml`.
+The `.gitignore` already excludes `secrets.toml`.
 
 ### 2. Fill in your secrets
 
-Edit `.streamlit/secrets.toml`:
+Create your local secrets file from the template:
 
-```toml
-[anthropic]
-api_key = "sk-ant-api03-..."        # From console.anthropic.com → API Keys
-
-[snowflake]
-account   = "abc12345.us-east-1"   # From Snowflake: Admin → Accounts → copy identifier
-user      = "CHRIS"
-password  = "your_password"
-warehouse = "COMPUTE_WH"
-database  = "JOB_TRACKER"          # Created automatically on first run
-schema    = "PUBLIC"
-role      = "SYSADMIN"
+```bash
+cp secrets.example.toml secrets.toml
 ```
+
+Then edit `secrets.toml` with your Anthropic and Snowflake values.
 
 **Finding your Snowflake account identifier:**
 1. Log into app.snowflake.com
@@ -69,7 +61,7 @@ role      = "SYSADMIN"
 2. Click **New app** → connect your GitHub repo
 3. Set **Main file path** to `app.py`
 4. Go to **Advanced settings → Secrets**
-5. Paste the contents of your `secrets.toml` (without the comment block at the top)
+5. Paste the contents of your `secrets.toml`
 6. Click **Deploy**
 
 ### 4. Run locally (optional)
@@ -94,7 +86,7 @@ No manual SQL required.
 
 ## Security Notes
 
-- Your Anthropic API key and Snowflake credentials live **only** in Streamlit secrets
-- They are never stored in the code or committed to GitHub
+- Keep real credentials only in local `secrets.toml` and in your Streamlit Cloud Secrets panel
+- Commit only `secrets.example.toml`; never commit `secrets.toml`
 - Streamlit Community Cloud encrypts secrets at rest
 - The `.docx` is generated in memory and sent directly to your browser — nothing is written to disk
