@@ -259,12 +259,12 @@ if page == "🏠 Dashboard":
 elif page == "🧾 Resume Manager":
     st.title("Resume Manager")
     stored_resume = db.get_base_resume()
-    active_resume = stored_resume or ai_engine.DEFAULT_RESUME
+    active_resume = stored_resume or ""
 
     if stored_resume:
         st.caption("Using your saved base resume for AI analysis.")
     else:
-        st.caption("No uploaded base resume yet. The built-in resume is currently active.")
+        st.warning("⚠️ No resume uploaded yet. Add one below before running AI analysis.")
 
     tab_upload, tab_replace, tab_edit = st.tabs([
         "Upload Current Resume",
@@ -305,19 +305,12 @@ elif page == "🧾 Resume Manager":
 
     with tab_edit:
         edited_resume = st.text_area("Edit active resume", value=active_resume, height=380, key="edit_active_resume")
-        c_save, c_reset = st.columns(2)
-        with c_save:
-            if st.button("Save Edits", key="save_edited_resume", type="primary", use_container_width=True):
-                if not edited_resume.strip():
-                    st.error("Resume text cannot be empty.")
-                else:
-                    db.save_base_resume(edited_resume.strip())
-                    st.success("Resume edits saved.")
-                    st.rerun()
-        with c_reset:
-            if st.button("Reset to Default Resume", key="reset_default_resume", use_container_width=True):
-                db.clear_base_resume()
-                st.success("Reset complete. The built-in default resume is now active.")
+        if st.button("Save Edits", key="save_edited_resume", type="primary"):
+            if not edited_resume.strip():
+                st.error("Resume text cannot be empty.")
+            else:
+                db.save_base_resume(edited_resume.strip())
+                st.success("Resume edits saved.")
                 st.rerun()
 
 
