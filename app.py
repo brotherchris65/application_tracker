@@ -60,6 +60,40 @@ def _resume_text_from_upload(uploaded_file):
     raise ValueError("Unsupported file type. Upload a .txt or .docx file.")
 
 
+def _save_job_details(job_id, *, title, company, url, location, salary, jd):
+    if hasattr(db, "update_job_details"):
+        db.update_job_details(
+            job_id,
+            title=title,
+            company=company,
+            url=url,
+            location=location,
+            salary=salary,
+            jd=jd,
+        )
+        return
+
+    db.run("""
+        UPDATE JOBS
+        SET TITLE = %s,
+            COMPANY = %s,
+            URL = %s,
+            LOCATION = %s,
+            SALARY = %s,
+            JD = %s
+        WHERE JOB_ID = %s
+    """, (
+        title,
+        company,
+        url or None,
+        location or None,
+        salary or None,
+        jd or None,
+        job_id,
+    ))
+    db.get_conn().commit()
+
+
 # ── Job detail renderer (defined before page routing) ─────────────────────────
 def render_job_detail(j):
     tab_overview, tab_analysis, tab_resume, tab_cover, tab_notes = st.tabs(
@@ -116,7 +150,7 @@ def render_job_detail(j):
                     if not edit_title.strip() or not edit_company.strip():
                         st.error("Job Title and Company are required.")
                     else:
-                        db.update_job_details(
+                        _save_job_details(
                             j["job_id"],
                             title=edit_title.strip(),
                             company=edit_company.strip(),
