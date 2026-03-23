@@ -6,71 +6,21 @@ API key lives in st.secrets["anthropic"]["api_key"].
 import streamlit as st
 import anthropic
 import json
+import base64
 import db
-
-RESUME = """
-Name: Christopher Hill
-Title: Data Engineering Manager & BI Lead
-Location: Burleson, TX
-Contact: 817-805-0832 | brotherchris65@gmail.com | linkedin.com/in/chris-hill02020
-
-SUMMARY:
-Results-driven Data Engineering leader who builds high-performing teams, earns executive
-trust, and delivers enterprise-grade data infrastructure. Daily engagement with C-Suite and
-VP-level stakeholders. Led migration to Snowflake Bronze/Silver/Gold medallion architecture.
-Expert in the modern data stack.
-
-SKILLS:
-Platforms: Snowflake, Power BI, NetSuite, Zoho CRM, Infusionsoft, MySQL, Docker, Django
-Languages: Python (Pandas, NumPy, Matplotlib, SQLAlchemy), SQL, HTML, JavaScript, CSS
-Data Integration: Airbyte, Fivetran, Dagster, Rudderstack
-AI Development: Snowflake Cortex AI, Streamlit, LLM Functions, Agent Development
-Frameworks: dbt, Power Query, DAX, SQLAlchemy
-Data Engineering: Medallion Architecture, Dev/Prod Environment Management,
-  ETL/ELT Pipeline Design, Data Governance, Naming Conventions,
-  Pipeline Monitoring, Data Integrity Testing
-Analysis: Data Wrangling, Data Mining, Data Visualization, Executive Reporting
-Certifications: Google Data Analytics Certification (2021), Google Certified Educator Level 2 (2020)
-
-EXPERIENCE:
-
-Brave Thinking Institute (2022–Present) — Data Engineering Manager & BI Lead
-- Lead cross-functional team of data engineers, data scientists, and contractors
-- Engage daily with C-Suite and VP-level leadership on strategy and insights
-- Architected migration of disparate data sources into Snowflake with Bronze/Silver/Gold
-  medallion architecture and separate dev/prod environments in Snowflake and dbt
-- Established ETL governance policies, naming conventions, mandatory dbt schema tests,
-  and a monitoring dashboard
-- Ingest data from CRM (Zoho, Infusionsoft), financial (NetSuite), and marketing sources
-  via Airbyte and Fivetran
-- Manage customer profile and identity resolution via Rudderstack
-- Build and orchestrate production ELT pipelines with Dagster and dbt
-- Develop AI agents using Snowflake Cortex; build Streamlit executive dashboards
-- Create and maintain Power BI reports with DAX and Power Query
-- Track lead opt-in/conversion rates; calculate ROI across marketing channels
-
-Vio Security (2021–2022) — Business Intelligence Analyst
-- Extracted data from multiple sources; maintained Sales, Service, and Financial
-  dashboards and reports in Power BI
-- Created Sales and Service reports that drove significant operational changes
-- Produced Residual Monthly Revenue Reports and weekly/monthly maintenance logs
-
-Texas Public Schools (2007–2021) — Computer Science & Robotics Instructor | Mathematics Teacher
-- Pioneered district's first Computer Science program (Python, HTML, CSS) — 97% success rate
-- Led faculty data literacy initiative; trained 50+ educators — 100% adoption
-- Led district-level data analysis project producing a new student intervention program
-- Served as curriculum lead for Mathematics department
-
-EDUCATION:
-- Master of Education, Educational Leadership — Lamar University (2010)
-- Master of Divinity with Biblical Languages — Southwestern Baptist Theological Seminary (2002)
-- BS, Occupational Education (Russian, Religion & Crypto-Linguistics) — Wayland Baptist University (1999)
-- US Air Force — Airborne Russian Cryptologic Linguist, Worldwide (1983–1999)
-"""
+import pdf_builder
 
 
 def _client():
     return anthropic.Anthropic(api_key=st.secrets["anthropic"]["api_key"])
+
+
+def _base_resume_text() -> str | None:
+    saved = db.get_base_resume()
+    if not saved:
+        return None
+    saved_text = str(saved).strip()
+    return saved_text if saved_text else None
 
 
 def analyze(job_id: str, title: str, company: str, jd: str) -> bool:
@@ -78,6 +28,11 @@ def analyze(job_id: str, title: str, company: str, jd: str) -> bool:
     Run full AI analysis: match score, skills, tailored resume, cover letter.
     Saves everything to Snowflake. Returns True on success.
     """
+    base_resume = _base_resume_text()
+    if not base_resume:
+        st.error("No active resume found. Upload your resume in Resume Manager before running AI analysis.")
+        return False
+
     prompt = f"""You are an expert resume writer and job-match analyst.
 Return ONLY valid JSON — no markdown fences, no commentary, just the raw JSON object.
 
@@ -88,42 +43,29 @@ Return ONLY valid JSON — no markdown fences, no commentary, just the raw JSON 
   "gap_skills": ["skill1", "skill2"],
   "nice_to_have": ["skill1", "skill2"],
   "tailored_resume": {{
+    "name": "<candidate full name from resume if available, else empty string>",
+    "headline": "<candidate title/headline from resume if available, else empty string>",
+    "contact": "<single line contact info from resume if available, else empty string>",
     "summary": "<3-4 sentence professional summary rewritten to mirror this job's language and priorities — 100% truthful to actual experience>",
     "skills": {{
-      "platforms": "<comma-separated, reordered to prioritize what matches this job>",
-      "languages": "<comma-separated>",
-      "data_integration": "<comma-separated>",
-      "ai_development": "<comma-separated>",
-      "frameworks": "<comma-separated>",
-      "data_engineering": "<comma-separated>",
-      "analysis": "<comma-separated>"
+      "core": "<comma-separated skills prioritized for this role>"
     }},
     "experience": [
       {{
-        "company": "Brave Thinking Institute",
-        "title": "Data Engineering Manager & BI Lead",
-        "dates": "2022 – Present",
-        "bullets": ["<rewritten bullet using job keywords where truthful — 6 bullets>"]
-      }},
-      {{
-        "company": "Vio Security",
-        "title": "Business Intelligence Analyst",
-        "dates": "2021 – 2022",
-        "bullets": ["<rewritten bullet — 3 bullets>"]
-      }},
-      {{
-        "company": "Texas Public Schools",
-        "title": "Computer Science & Robotics Instructor | Mathematics Teacher",
-        "dates": "2007 – 2021",
-        "bullets": ["<rewritten bullet — 3 bullets>"]
+        "company": "<company>",
+        "title": "<title>",
+        "dates": "<date range>",
+        "bullets": ["<2-6 rewritten bullets using job keywords where truthful>"]
       }}
-    ]
+    ],
+    "education": ["<optional education line>", "<optional education line>"],
+    "certifications": ["<optional certification>", "<optional certification>"]
   }},
-  "cover_letter": "<full professional cover letter ~350 words, To Hiring Manager, signed Christopher Hill, referencing the specific role and company, highlighting most relevant achievements>"
+  "cover_letter": "<full professional cover letter ~350 words, addressed To Hiring Manager, signed with candidate name from resume, referencing the specific role and company, highlighting most relevant achievements>"
 }}
 
 CANDIDATE RESUME:
-{RESUME}
+{base_resume}
 
 TARGET JOB: {title} at {company}
 {jd}"""
@@ -159,6 +101,8 @@ TARGET JOB: {title} at {company}
         tr = parsed.get("tailored_resume")
         if tr:
             db.save_document(job_id, "resume", json.dumps(tr))
+            pdf_bytes = pdf_builder.build(tr, title, company)
+            db.save_document(job_id, "resume_pdf", base64.b64encode(pdf_bytes).decode("utf-8"))
 
         # ── Save cover letter ────────────────────────────────────────────────
         cl = parsed.get("cover_letter", "")

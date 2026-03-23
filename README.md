@@ -8,8 +8,9 @@ cover letter generation, and Snowflake-backed storage.
 ## Features
 
 - **Add & track jobs** — paste job URLs and descriptions, set status, follow-up dates
+- **Resume Manager** — upload your current resume (`.txt` or `.docx`), replace with a different version, or edit the active resume text
 - **AI Analysis** — match score, matched skills, skill gaps, nice-to-haves
-- **Tailored Resume** — full rewritten resume generated per job, downloadable as `.docx`
+- **Tailored Resume** — full rewritten resume generated per job, downloadable as `.docx` and `.pdf`
 - **Cover Letter** — AI-written, tailored to each specific role
 - **Pipeline view** — Kanban-style board by status
 - **Reminders** — overdue and upcoming follow-up alerts

@@ -1,9 +1,13 @@
 import streamlit as st
 import json
+import base64
+from io import BytesIO
 from datetime import date, timedelta
+from docx import Document
 import db
 import ai_engine
 import docx_builder
+import pdf_builder
 
 st.set_page_config(
     page_title="JobTrack — Chris Hill",
@@ -37,13 +41,23 @@ with st.sidebar:
     st.markdown("## 📋 JobTrack")
     st.caption("Chris Hill · Data Engineering")
     st.divider()
-    page = st.radio("Navigate", ["🏠 Dashboard","➕ Add Job","⚡ Pipeline","📄 All Jobs","⏰ Reminders"], label_visibility="collapsed")
+    page = st.radio("Navigate", ["🏠 Dashboard","🧾 Resume Manager","➕ Add Job","⚡ Pipeline","📄 All Jobs","⏰ Reminders"], label_visibility="collapsed")
     st.divider()
     stats = db.get_stats()
     st.markdown(f"**Total tracked:** {stats['total']}")
     st.markdown(f"**Applied:** {stats['applied']}")
     st.markdown(f"**Interviews:** {stats['interviews']}")
     st.markdown(f"**Follow-ups due:** <span style='color:#e05c5c'>{stats['followups_due']}</span>", unsafe_allow_html=True)
+
+
+def _resume_text_from_upload(uploaded_file):
+    name = (uploaded_file.name or "").lower()
+    if name.endswith(".txt"):
+        return uploaded_file.getvalue().decode("utf-8", errors="ignore").strip()
+    if name.endswith(".docx"):
+        doc = Document(BytesIO(uploaded_file.getvalue()))
+        return "\n".join(p.text for p in doc.paragraphs if p.text and p.text.strip()).strip()
+    raise ValueError("Unsupported file type. Upload a .txt or .docx file.")
 
 
 # ── Job detail renderer (defined before page routing) ─────────────────────────
@@ -141,10 +155,25 @@ def render_job_detail(j):
                     for b in exp.get("bullets",[]):
                         st.markdown(f"- {b}")
             docx_bytes = docx_builder.build(resume_data, j["title"], j["company"])
-            safe_name = f"ChrisHill_Resume_{'_'.join(j['company'].split())[:20]}_{'_'.join(j['title'].split())[:20]}.docx"
-            st.download_button("⬇ Download .docx", data=docx_bytes, file_name=safe_name,
-                               mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                               key=f"dl_{j['job_id']}", type="primary")
+            safe_name = f"Resume_{'_'.join(j['company'].split())[:20]}_{'_'.join(j['title'].split())[:20]}.docx"
+
+            pdf_doc = db.get_document(j["job_id"], "resume_pdf")
+            if pdf_doc and pdf_doc.get("content"):
+                pdf_bytes = base64.b64decode(pdf_doc["content"])
+            else:
+                pdf_bytes = pdf_builder.build(resume_data, j["title"], j["company"])
+                db.save_document(j["job_id"], "resume_pdf", base64.b64encode(pdf_bytes).decode("utf-8"))
+            safe_pdf_name = f"Resume_{'_'.join(j['company'].split())[:20]}_{'_'.join(j['title'].split())[:20]}.pdf"
+
+            c_docx, c_pdf = st.columns(2)
+            with c_docx:
+                st.download_button("⬇ Download .docx", data=docx_bytes, file_name=safe_name,
+                                   mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                   key=f"dl_docx_{j['job_id']}", type="primary", use_container_width=True)
+            with c_pdf:
+                st.download_button("⬇ Download .pdf", data=pdf_bytes, file_name=safe_pdf_name,
+                                   mime="application/pdf",
+                                   key=f"dl_pdf_{j['job_id']}", use_container_width=True)
             if st.button("↺ Regenerate Resume", key=f"regen_{j['job_id']}"):
                 with st.spinner("Regenerating…"):
                     ai_engine.analyze(j["job_id"], j["title"], j["company"], j["jd"])
@@ -222,6 +251,74 @@ if page == "🏠 Dashboard":
                     cls = "score-high" if sc >= 75 else "score-mid" if sc >= 50 else "score-low"
                     score_html = f' <span class="{cls}">{sc}%</span>'
                 st.markdown(f"**{j['title']}** · {j['company']}{score_html} — `{j['status'].upper()}`", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: Resume Manager
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "🧾 Resume Manager":
+    st.title("Resume Manager")
+    stored_resume = db.get_base_resume()
+    active_resume = stored_resume or ai_engine.DEFAULT_RESUME
+
+    if stored_resume:
+        st.caption("Using your saved base resume for AI analysis.")
+    else:
+        st.caption("No uploaded base resume yet. The built-in resume is currently active.")
+
+    tab_upload, tab_replace, tab_edit = st.tabs([
+        "Upload Current Resume",
+        "Add Different Resume",
+        "Edit Active Resume"
+    ])
+
+    with tab_upload:
+        uploaded = st.file_uploader("Upload a resume (.txt or .docx)", type=["txt", "docx"], key="resume_upload")
+        if uploaded:
+            try:
+                parsed_resume = _resume_text_from_upload(uploaded)
+                if not parsed_resume:
+                    st.warning("The uploaded file appears empty.")
+                else:
+                    st.text_area("Preview", value=parsed_resume, height=220, key="upload_preview")
+                    if st.button("Use This Resume", key="save_uploaded_resume", type="primary"):
+                        db.save_base_resume(parsed_resume)
+                        st.success("Uploaded resume is now your active base resume.")
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Could not read uploaded file: {e}")
+
+    with tab_replace:
+        replacement_resume = st.text_area(
+            "Paste a different resume",
+            height=260,
+            placeholder="Paste the full resume text you want to use for future AI analysis…",
+            key="replace_resume_text",
+        )
+        if st.button("Save Different Resume", key="save_replacement_resume"):
+            if not replacement_resume.strip():
+                st.error("Paste resume text before saving.")
+            else:
+                db.save_base_resume(replacement_resume.strip())
+                st.success("Different resume saved and set as active.")
+                st.rerun()
+
+    with tab_edit:
+        edited_resume = st.text_area("Edit active resume", value=active_resume, height=380, key="edit_active_resume")
+        c_save, c_reset = st.columns(2)
+        with c_save:
+            if st.button("Save Edits", key="save_edited_resume", type="primary", use_container_width=True):
+                if not edited_resume.strip():
+                    st.error("Resume text cannot be empty.")
+                else:
+                    db.save_base_resume(edited_resume.strip())
+                    st.success("Resume edits saved.")
+                    st.rerun()
+        with c_reset:
+            if st.button("Reset to Default Resume", key="reset_default_resume", use_container_width=True):
+                db.clear_base_resume()
+                st.success("Reset complete. The built-in default resume is now active.")
+                st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════

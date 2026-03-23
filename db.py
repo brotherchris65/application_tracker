@@ -138,6 +138,14 @@ def init():
                 UNIQUE (JOB_ID, DOC_TYPE)
             )
         """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS APP_SETTINGS (
+                SETTING_KEY   VARCHAR(100) PRIMARY KEY,
+                SETTING_VALUE TEXT,
+                UPDATED_AT    TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
     conn.commit()
 
 
@@ -303,6 +311,42 @@ def get_document(job_id, doc_type):
         WHERE JOB_ID = %s AND DOC_TYPE = %s
     """, (job_id, doc_type), fetch=True)
     return rows[0] if rows else None
+
+
+def set_setting(key, value):
+    run("""
+        MERGE INTO APP_SETTINGS AS t
+        USING (SELECT %s AS SETTING_KEY) AS s ON t.SETTING_KEY = s.SETTING_KEY
+        WHEN MATCHED THEN UPDATE SET SETTING_VALUE = %s, UPDATED_AT = CURRENT_TIMESTAMP
+        WHEN NOT MATCHED THEN INSERT (SETTING_KEY, SETTING_VALUE)
+            VALUES (%s, %s)
+    """, (key, value, key, value))
+    get_conn().commit()
+
+
+def get_setting(key):
+    rows = run("""
+        SELECT SETTING_VALUE, UPDATED_AT
+        FROM APP_SETTINGS
+        WHERE SETTING_KEY = %s
+    """, (key,), fetch=True)
+    return rows[0] if rows else None
+
+
+def save_base_resume(resume_text):
+    set_setting("base_resume", resume_text)
+
+
+def get_base_resume():
+    row = get_setting("base_resume")
+    if not row:
+        return None
+    return row.get("setting_value")
+
+
+def clear_base_resume():
+    run("DELETE FROM APP_SETTINGS WHERE SETTING_KEY = %s", ("base_resume",))
+    get_conn().commit()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
