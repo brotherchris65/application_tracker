@@ -71,6 +71,20 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+### 5. Create a PR from terminal (optional)
+
+```bash
+gh auth login
+./scripts/create-pr.sh "docs: your PR title" --fill
+```
+
+You can also use a token instead of interactive login:
+
+```bash
+export GH_TOKEN=<your_github_pat>
+./scripts/create-pr.sh "docs: your PR title" --fill
+```
+
 ---
 
 ## First Run
